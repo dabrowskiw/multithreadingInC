@@ -201,7 +201,18 @@ int pthread_create(pthread_t *thread,
 
 Implizit: main ist immer ein Thread, weitere müssen explizit erstellt werden.
 
-== Einfaches Beispiel
+== Einschub: Code-Beispiele
+
+- Code-Beispiele (und Folien) in github:\ #link("https://tinyurl.com/bht-pthreads")[https://tinyurl.com/bht-pthreads]
+- Gerne mitmachen, einfach:
+  - `git clone https://github.com/dabrowskiw/multithreadingInC.git`
+  - `gcc pthrerd_exN.c && ./a.out` (\_exN.c: Folientitel)
+- Randnotiz: Folien sind #link("https://typst.app")[Typst]:
+  - LaTeX meets markdown
+  - Bauen (-> pdf)  mit `typst compile Folien.typ`
+
+
+== Einfaches Beispiel (\_ex1.c)
 
 #slide(composer: (2.8fr, 1fr))[
   #text(size: 14pt, sourcecode[```c
@@ -283,7 +294,7 @@ Creating thread 5
   - Return-value von pthread_join: Status code/error, falls join nicht geklappt hat
 ]
 
-== Join und return value 
+== Join und return value (\_ex2.c)
 
 #slide(composer: (2.8fr, 1fr))[
   #text(size: 14pt, sourcecode[```c
@@ -326,7 +337,7 @@ Result of thread 5: 25
 ```])
 ]
 
-== Join und return value - Einfachere Alternative?
+== Join und return value - einfachere Alternative?
 
 #slide(composer: (2.8fr, 1fr))[
   #text(size: 14pt, sourcecode[```c
@@ -385,7 +396,7 @@ Result of thread 5: 0
   - Schreibt Wert aus Register in x
 - Was passiert, wenn zwei Threads das gleichzeitig machen?
 
-== Race condition: Beispiel
+== Race condition: Beispiel (\_ex3.c)
 
 #slide(composer: (2.4fr, 1fr))[
   #text(size: 14pt, sourcecode[```c
@@ -456,7 +467,7 @@ int pthread_mutex_unlock(pthread_mutex_t *lock);
   - Gibt `lock` frei
   - Falls mehrere andere Threads warten: OS-Scheduling entscheidet
 
-== Mutex gegen race condition: Beispiel
+== Mutex gegen race condition: Beispiel (\_ex4.c)
 
 #slide(composer: (2.4fr, 1fr))[
   #text(size: 14pt, sourcecode[```c
@@ -501,12 +512,133 @@ Incremented result: 600000
   ```])
 ]
 
+== Mehrere Mutexes
 
+- Vorteil mutex: Sicherheit
+- Nachteil mutex: Geringere Parallelität (-> Amdahl's law etc.)
+- Bei unabhängigen kritischen Bereichen: Mehrere mutex-Variablen = mehr Parallelität
+- Beispiel: Banking-Applikation mit zwei Konten
+  - Können unabhängig voneinander Verwaltet werden
+  - Ein Mutex pro Konto
 
+#sourcecode[```c
+int maxmueller = 1000;
+int lisemueller = 1000;
+pthread_mutex_t lock_max = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t lock_lise = PTHREAD_MUTEX_INITIALIZER;
+```]
 
-== Erfolgskontrolle: Kurz-Quizzes zwischendurch?
+== Mehrere Mutexes: Beispiel (\_ex5.c)
 
-- TODO
+#slide(composer: (2.4fr, 1fr))[
+  #text(size: 14pt, sourcecode[```c
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#define NUM_THREADS 6
+
+int maxmueller = 1000; int lisemueller = 1000;
+
+void *transfer(void *amount) {
+  sleep(1); maxmueller += *(int*)amount;
+  sleep(1); lisemueller -= *(int*)amount;
+  printf("Max: %d, Lise: %d\n", maxmueller, lisemueller);
+  pthread_exit(NULL);
+}
+void *get_difference(void *arg) {
+  sleep(2);
+  printf("Max hat %d mehr als Lise\n", (maxmueller-lisemueller));
+  pthread_exit(NULL);
+}
+int main(int argc, char *argv[]) {
+  pthread_t threads[2*NUM_THREADS];
+  for(long tid=0; tid<NUM_THREADS; tid++) {
+    pthread_create(&threads[tid+1], NULL, &transfer, (void *)&tid );
+    pthread_create(&threads[2*tid], NULL, &get_difference, NULL );
+  }
+  pthread_exit(NULL);
+}
+```])
+][
+  #pause
+  #text(size: 14pt, sourcecode[```text
+Max hat 36 mehr als Lise
+Max: 1036, Lise: 994
+Max hat 42 mehr als Lise
+Max: 1036, Lise: 988
+Max hat 48 mehr als Lise
+Max: 1036, Lise: 982
+Max: 1036, Lise: 976
+Max hat 60 mehr als Lise
+Max: 1036, Lise: 970
+Max hat 66 mehr als Lise
+Max hat 60 mehr als Lise
+Max: 1036, Lise: 964a
+  ```])
+
+...Typische race condition
+]
+
+== Mehrere Mutexes: Beispiel (II) (\_ex6.c)
+
+#slide(composer: (2.4fr, 1fr))[
+  #text(size: 14pt, sourcecode[```c
+int maxmueller = 1000; 
+int lisemueller = 1000;
+pthread_mutex_t lock_max = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t lock_lise = PTHREAD_MUTEX_INITIALIZER;
+
+void *transfer(void *amount) {
+  pthread_mutex_lock(&lock_lise);
+  pthread_mutex_lock(&lock_max);
+  maxmueller += *(int*)amount;
+  lisemueller -= *(int*)amount;
+  printf("Max: %d, Lise: %d\n", maxmueller, lisemueller);
+  pthread_mutex_unlock(&lock_max);
+  pthread_mutex_unlock(&lock_lise);
+  pthread_exit(NULL);
+}
+void *get_difference(void *arg) {
+  pthread_mutex_lock(&lock_max);
+  pthread_mutex_lock(&lock_lise);
+  printf("Max hat %d mehr als Lise\n", (maxmueller-lisemueller));
+  pthread_mutex_unlock(&lock_lise);
+  pthread_mutex_unlock(&lock_max);
+  pthread_exit(NULL);
+}
+```])
+
+  #only("2-")[
+    1 hat lise, will max. 2 hat max, will lise.
+  ]
+][
+  #only("2-")[
+  #text(size: 14pt, sourcecode[```text
+Max: 1001, Lise: 999
+Max hat 2 mehr als Lise
+Max: 1004, Lise: 996
+Max hat 8 mehr als Lise
+  ```])
+  Unreproduzierbar.
+  Deadlock:
+    - Früher?
+    - Später?
+    - Gar nicht?
+  ]
+]
+
+== Deadlock
+
+- Deadlock = Zwei Threads warten unlösbar aufeinander
+- Gefahr bei:
+  - Mehreren verschachtelten mutexes
+  - Mehrfachverwendung eines mutex in einem Thread 
+- Lösung:
+  - Bei Verschachtelten mutexes immer global gleiche lock order!
+  - Mehrfach-lock: Recursive oder errorcheck type (statt default):
+    - Typ-Attribut initialisieren und setzen
+    - mutex explizit mit `pthread_mutex_init` initialisieren (anstatt macro)
 
 == Quellen
 
