@@ -652,7 +652,7 @@ Danke für Ihre Aufmerksamkeit!
 ...Fragen?
 ]
 
-== Mehr Argumente: Struct
+== Mehr Argumente: Struct (\_struct.c)
 
 
 #slide(composer: (2.8fr, 1fr))[
